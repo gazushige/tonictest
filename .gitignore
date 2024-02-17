@@ -1,0 +1,20 @@
+# ビルド済みファイル
+target/
+.cargo/
+
+# テスト関連ファイル
+*.test.rs
+*.spec.rs
+
+# デバッグ関連ファイル
+*.dbg
+
+# IDE 関連ファイル
+.vscode/
+.idea/
+
+# その他
+*.log
+*.tmp
+Cargo.lock
+.env
