@@ -1,26 +1,14 @@
-// lib.rsファイルのモジュールをインポート
-mod mylib;
-use mylib::MyGreeter;
-use tonic::transport::Server;
-use mylib::hello_world;
-use hello_world::greeter_server::GreeterServer;
+//汎用的なライブラリ
+
 use dotenv::dotenv;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    load_env();
-    let addr = format!("{}:{}",env_var("ServerIP"),env_var("Port")).parse()?;
-    let greeter = MyGreeter::default();
-
-    Server::builder()
-        .add_service(GreeterServer::new(greeter))
-        .serve(addr)
-        .await?;
-
-    Ok(())
+pub struct GrpcResponse{
+    pub status: String,
+    pub body: String,
 }
+
 // .envファイルを読み込む関数
-fn load_env() {
+pub fn load_env() {
     // .env ファイルのパスを取得
     let dotenv_path = ".env";
 
@@ -32,6 +20,6 @@ fn load_env() {
     dotenv().ok();
 }
 // keyをもとに環境変数を取得する関数
-fn env_var(key: &str) -> String {
+pub fn env_var(key: &str) -> String {
     std::env::var(key).unwrap_or_else(|_| panic!("{}の環境変数が見つかりません", key))
 }

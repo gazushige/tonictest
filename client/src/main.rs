@@ -1,5 +1,9 @@
-use hello_world::greeter_client::GreeterClient;
-use hello_world::HelloRequest;
+// エントリーポイント用関数は出来るだけコンパクトにする
+// それ以外の関数はモジュールに分ける
+pub use crate::sayhello::{HelloReply, HelloRequest,HelloService,Connection};
+pub mod sayhello;
+pub mod mylib;
+pub use crate::mylib::load_env;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -7,15 +11,13 @@ pub mod hello_world {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = GreeterClient::connect("http://127.0.0.1:8080").await?;
-
-    let request = tonic::Request::new(HelloRequest {
-        name: "Tonic".into(),
-    });
-
-    let response = client.say_hello(request).await?;
-
+    load_env();
+    
+    let mut instance=sayhello::HelloService::new("Gazushige impl2").await?;
+    let response=instance.say_hello().await?;
+    // レスポンスと HTTP ステータスコードをログに出力
     println!("RESPONSE={:?}", response);
-
     Ok(())
 }
+
+

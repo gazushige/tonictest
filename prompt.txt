@@ -1,0 +1,140 @@
+命令：解決策を教えて
+
+環境：
+[tonic　server]
+use tonic::{transport::Server, Request, Response, Status};
+
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
+
+pub mod hello_world {
+    tonic::include_proto!("helloworld");
+}
+
+#[derive(Debug, Default)]
+pub struct MyGreeter {}
+
+#[tonic::async_trait]
+impl Greeter for MyGreeter {
+    async fn say_hello(
+        &self,
+        request: Request<HelloRequest>,
+    ) -> Result<Response<HelloReply>, Status> {
+        println!("Got a request: {:?}", request);
+
+        let reply = hello_world::HelloReply {
+            message: format!("Hello {}!", request.into_inner().name),
+        };
+
+        Ok(Response::new(reply))
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "127.0.0.1:8080".parse()?;
+    let greeter = MyGreeter::default();
+
+    Server::builder()
+        .add_service(GreeterServer::new(greeter))
+        .serve(addr)
+        .await?;
+
+    Ok(())
+}
+
+[tonic　client]
+use hello_world::greeter_client::GreeterClient;
+use hello_world::HelloRequest;
+
+pub mod hello_world {
+    tonic::include_proto!("helloworld");
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = GreeterClient::connect("http://localhost:80/").await?;
+
+    let request = tonic::Request::new(HelloRequest {
+        name: "Gazushige".into(),
+    });
+
+    let response = client.say_hello(request).await?;
+
+    // HTTP ステータスコードを取得
+    let http_status = response.metadata().get("status");
+
+    // レスポンスと HTTP ステータスコードをログに出力
+    println!("RESPONSE={:?}, STATUS_CODE={:?}", response, http_status);
+
+
+    Ok(())
+}
+
+[nginx　docker-compose設定]
+version: "3"
+services:
+    web:
+        image: nginx:latest
+        container_name: nginx
+        ports:
+            - "80:80"
+            - "8080:8080"
+
+        tty: true
+
+        volumes:
+            - ./var/www/html:/var/www/html
+            - D:\src\docker\web\django\next-django\back\static:/var/django/static
+            - ./log:/var/log/nginx
+            - ./docker.sock:/tmp/docker.sock:ro
+            - ./nginx:/etc/nginx/conf.d #必須ではないがvolume化しておくと弄るのが楽になる
+            - ./ssl:/ssl
+            # - ../../django/gallery-template/gallery/images:/usr/share/nginx/html/media
+
+        # extra_hosts:
+        #     - "host.docker.internal:host-gateway"
+
+[nginx　conf]
+upstream grpc_backend {
+    server localhost:8080;  # gRPCサーバーのアドレスとポート
+}
+server {
+    listen 80 http2;
+    # http2 on;
+    server_name localhost; # ドメイン名またはIPアドレスを指定
+
+    # # このはゲームの公式サイトへ
+    # location /web/konohagames {
+    #     alias /var/www/html/konohagames; # Reactアプリのディレクトリパスを指定
+    #     index index.html;
+    #     try_files $uri $uri/ web/konohagames/index.html; # パスを修正
+    # }
+    # location / {
+        
+    #     proxy_pass http://django;
+    #     proxy_set_header Host $host;
+    #     proxy_set_header X-Real-IP $remote_addr;
+    #     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    #     proxy_set_header X-Forwarded-Proto $scheme;
+    #     proxy_set_header X-Forwarded-Host $host;
+    #     proxy_set_header X-Forwarded-Port $server_port;
+    #     proxy_set_header X-Forwarded-Ssl on;
+    # }
+
+    location / {
+        grpc_pass grpc://grpc_backend;
+
+        grpc_set_header Host $host;
+        grpc_set_header X-Real-IP $remote_addr;
+        grpc_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        grpc_set_header X-Forwarded-Proto $scheme;
+        grpc_set_header X-Forwarded-Host $host;
+        grpc_set_header X-Forwarded-Port $server_port;
+        grpc_set_header X-Forwarded-Ssl on;
+    }
+    error_log /var/log/nginx/error.log;
+    access_log /var/log/nginx/access.log;
+}
+
+状況：上記の環境で、tonicクライアントからNGINXのリバースプロキシを経由してtonicサーバにgrpc接続したい。しかしクライアント側にError: tonic::transport::Error(Transport, hyper::Error(Connect, ConnectError("tcp connect error", Os { code: 99, kind: AddrNotAvailable, message: "Cannot assign requested address" })))というエラーが出る。またNGINXサーバにはアクセスログにもエラーログにも一切の出力が無い。NGINXにリクエストが届いていないようにも見える。
